@@ -5,6 +5,31 @@ import asyncio
 import yt_dlp
 import json
 import os
+import sys
+
+# ── Проверка зависимостей перед запуском ─────────────────────────────────────
+print("🔍 Проверка зависимостей...")
+
+# Проверяем критически важные зависимости
+try:
+    import nacl
+    print("✅ PyNaCl установлен")
+except ImportError:
+    print("❌ ОШИБКА: PyNaCl не установлен!")
+    print("Установите: pip install pynacl")
+    print("Или добавьте в requirements.txt: pynacl")
+    sys.exit(1)
+
+try:
+    print(f"✅ discord.py: {discord.__version__}")
+except:
+    print("✅ discord.py загружен")
+
+try:
+    import yt_dlp
+    print("✅ yt-dlp установлен")
+except ImportError:
+    print("⚠️ yt-dlp не установлен, музыка может не работать")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))
