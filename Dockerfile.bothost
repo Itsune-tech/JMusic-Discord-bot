@@ -1,0 +1,30 @@
+# Официальный Dockerfile для bothost.ru
+FROM python:3.11-slim
+
+# 1. Устанавливаем системные зависимости ДО установки Python пакетов
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libffi-dev \
+    libssl-dev \
+    libsodium-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Рабочая директория
+WORKDIR /app
+
+# 3. Копируем зависимости
+COPY requirements.txt .
+
+# 4. Устанавливаем Python зависимости
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# 5. Копируем код
+COPY . .
+
+# 6. Проверяем установку PyNaCl
+RUN python -c "import nacl; print('✅ PyNaCl установлен:', nacl.__version__)"
+
+# 7. Запускаем бота
+CMD ["python", "bot.py"]
