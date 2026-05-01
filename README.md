@@ -131,3 +131,34 @@ This project is for personal use. Ensure you comply with YouTube's Terms of Serv
 ## Support
 
 For issues and feature requests, please open an issue on GitHub.
+## FFmpeg Setup
+
+### For Local Development (Windows)
+1. Download `ffmpeg.exe` from https://ffmpeg.org/download.html
+2. Place it in the bot directory
+3. The bot will automatically use it
+
+### For Hosting (Linux/Mac)
+Most hosting platforms already have FFmpeg installed system-wide. If not:
+
+**Option 1: System installation**
+```bash
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install -y ffmpeg
+
+# CentOS/RHEL
+sudo yum install -y ffmpeg ffmpeg-devel
+```
+
+**Option 2: Use package manager**
+Add to your deployment script:
+```bash
+# Check if ffmpeg exists
+if ! command -v ffmpeg &> /dev/null; then
+    echo "Installing FFmpeg..."
+    # Add installation commands for your OS
+fi
+```
+
+**Option 3: Python package**
+The bot can also use `ffmpeg-python` package (added to requirements.txt).
