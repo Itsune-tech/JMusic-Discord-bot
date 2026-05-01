@@ -8,28 +8,41 @@ import os
 import sys
 
 # ── Проверка зависимостей перед запуском ─────────────────────────────────────
-print("🔍 Проверка зависимостей...")
+print("=" * 60)
+print("🔍 ДИАГНОСТИКА ЗАВИСИМОСТЕЙ ДЛЯ DISCORD БОТА")
+print("=" * 60)
 
-# Проверяем критически важные зависимости
-try:
-    import nacl
-    print("✅ PyNaCl установлен")
-except ImportError:
-    print("❌ ОШИБКА: PyNaCl не установлен!")
-    print("Установите: pip install pynacl")
-    print("Или добавьте в requirements.txt: pynacl")
-    sys.exit(1)
+# Проверяем ВСЕ критические зависимости
+deps = {
+    "discord": "discord.py",
+    "nacl": "PyNaCl (критически для голоса!)",
+    "yt_dlp": "yt-dlp",
+    "gtts": "gTTS",
+    "ffmpeg": "ffmpeg-python"
+}
 
-try:
-    print(f"✅ discord.py: {discord.__version__}")
-except:
-    print("✅ discord.py загружен")
+all_ok = True
+for import_name, package_name in deps.items():
+    try:
+        if import_name == "ffmpeg":
+            import ffmpeg
+        else:
+            __import__(import_name)
+        print(f"✅ {package_name} установлен")
+    except ImportError as e:
+        print(f"❌ {package_name} НЕ УСТАНОВЛЕН!")
+        if import_name == "nacl":
+            print("   ⚠️ БЕЗ PyNaCl ГОЛОСОВОЙ ФУНКЦИОНАЛ НЕ РАБОТАЕТ!")
+        all_ok = False
 
-try:
-    import yt_dlp
-    print("✅ yt-dlp установлен")
-except ImportError:
-    print("⚠️ yt-dlp не установлен, музыка может не работать")
+print("=" * 60)
+if not all_ok:
+    print("⚠️ НЕ ВСЕ ЗАВИСИМОСТИ УСТАНОВЛЕНЫ!")
+    print("Бот может не работать правильно.")
+    print("Установите: pip install discord.py pynacl yt-dlp gtts ffmpeg-python")
+else:
+    print("✅ ВСЕ ЗАВИСИМОСТИ УСТАНОВЛЕНЫ!")
+print("=" * 60)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))
