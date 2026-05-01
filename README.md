@@ -162,3 +162,29 @@ fi
 
 **Option 3: Python package**
 The bot can also use `ffmpeg-python` package (added to requirements.txt).
+## Troubleshooting
+
+### "davey library needed in order to use voice" Error
+
+This error occurs when PyNaCl (voice encryption library) is not properly installed.
+
+**Solution:**
+
+1. **Install system dependencies (Linux):**
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y libffi-dev libssl-dev libsodium-dev python3-dev build-essential
+   ```
+
+2. **Reinstall PyNaCl:**
+   ```bash
+   pip uninstall PyNaCl -y
+   pip install PyNaCl --no-cache-dir
+   ```
+
+3. **Alternative: Use discord.py[voice] package:**
+   ```bash
+   pip install discord.py[voice]
+   ```
+
+4. **For Docker/Railway/Heroku:** Add buildpacks or system packages for libsodium.

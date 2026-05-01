@@ -1,0 +1,6 @@
+# Системные зависимости для PyNaCl на Linux
+libffi-dev
+libssl-dev
+libsodium-dev
+python3-dev
+build-essential
