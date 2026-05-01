@@ -31,6 +31,24 @@ else:
 _FFMPEG_LOCAL = os.path.join(_HERE, 'ffmpeg.exe')
 FFMPEG_EXE = _FFMPEG_LOCAL if os.path.exists(_FFMPEG_LOCAL) else 'ffmpeg'
 
+# Check if FFmpeg is available
+def check_ffmpeg():
+    import subprocess
+    try:
+        # Try to run ffmpeg -version
+        result = subprocess.run([FFMPEG_EXE, '-version'], 
+                              capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            print(f"✓ FFmpeg доступен: {result.stdout.split()[2]}")
+            return True
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        print("✗ FFmpeg не найден. Установите FFmpeg для работы бота.")
+        print("Ссылка для скачивания: https://ffmpeg.org/download.html")
+        return False
+
+if not check_ffmpeg():
+    print("Бот может не работать без FFmpeg!")
+
 FFMPEG_OPTIONS = {
     'executable': FFMPEG_EXE,
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
