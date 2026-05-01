@@ -7,41 +7,73 @@ import json
 import os
 import sys
 
-# ── Проверка зависимостей перед запуском ─────────────────────────────────────
+# ── Проверка и АВТОМАТИЧЕСКАЯ установка зависимостей ───────────────────────
 print("=" * 60)
-print("🔍 ДИАГНОСТИКА ЗАВИСИМОСТЕЙ ДЛЯ DISCORD БОТА")
+print("🔍 ДИАГНОСТИКА И АВТОМАТИЧЕСКАЯ УСТАНОВКА ЗАВИСИМОСТЕЙ")
 print("=" * 60)
+
+import subprocess
+import sys
 
 # Проверяем ВСЕ критические зависимости
 deps = {
-    "discord": "discord.py",
-    "nacl": "PyNaCl (критически для голоса!)",
-    "yt_dlp": "yt-dlp",
-    "gtts": "gTTS",
-    "ffmpeg": "ffmpeg-python"
+    "discord": ("discord.py", "discord.py"),
+    "nacl": ("PyNaCl (критически для голоса!)", "pynacl"),
+    "yt_dlp": ("yt-dlp", "yt-dlp"),
+    "gtts": ("gTTS", "gtts"),
+    "ffmpeg": ("ffmpeg-python", "ffmpeg-python")
 }
 
-all_ok = True
-for import_name, package_name in deps.items():
+missing_deps = []
+for import_name, (package_name, pip_name) in deps.items():
     try:
         if import_name == "ffmpeg":
             import ffmpeg
         else:
             __import__(import_name)
         print(f"✅ {package_name} установлен")
-    except ImportError as e:
+    except ImportError:
         print(f"❌ {package_name} НЕ УСТАНОВЛЕН!")
+        missing_deps.append(pip_name)
         if import_name == "nacl":
             print("   ⚠️ БЕЗ PyNaCl ГОЛОСОВОЙ ФУНКЦИОНАЛ НЕ РАБОТАЕТ!")
-        all_ok = False
 
 print("=" * 60)
-if not all_ok:
-    print("⚠️ НЕ ВСЕ ЗАВИСИМОСТИ УСТАНОВЛЕНЫ!")
-    print("Бот может не работать правильно.")
-    print("Установите: pip install discord.py pynacl yt-dlp gtts ffmpeg-python")
-else:
-    print("✅ ВСЕ ЗАВИСИМОСТИ УСТАНОВЛЕНЫ!")
+
+# АВТОМАТИЧЕСКАЯ УСТАНОВКА если чего-то не хватает
+if missing_deps:
+    print(f"⚠️ Отсутствуют {len(missing_deps)} зависимостей")
+    print("Пробую установить автоматически...")
+    
+    for dep in missing_deps:
+        print(f"Устанавливаю {dep}...")
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", dep],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                print(f"✅ {dep} установлен")
+            else:
+                print(f"❌ Не удалось установить {dep}: {result.stderr[:100]}")
+        except Exception as e:
+            print(f"❌ Ошибка установки {dep}: {e}")
+    
+    # Проверяем снова после установки
+    print("\n🔍 Проверяю установку после автоматической инсталляции...")
+    for import_name, (package_name, _) in deps.items():
+        try:
+            if import_name == "ffmpeg":
+                import ffmpeg
+            else:
+                __import__(import_name)
+            print(f"✅ {package_name} теперь установлен")
+        except ImportError:
+            print(f"❌ {package_name} всё ещё не установлен")
+
+print("=" * 60)
+print("✅ ДИАГНОСТИКА ЗАВЕРШЕНА")
 print("=" * 60)
 
 # ── Config ────────────────────────────────────────────────────────────────────
