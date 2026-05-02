@@ -132,10 +132,25 @@ print(f"🔧 Окружение: {'Docker' if IS_DOCKER else 'Не Docker'}, {'L
 
 # Список путей для проверки (в порядке приоритета)
 # Приоритет зависит от окружения
-if IS_DOCKER or IS_LINUX:
-    # В Docker/Linux сначала ищем локальный Linux ffmpeg, затем системный
+if IS_DOCKER:
+    # В Docker сначала ищем системный ffmpeg (установленный через apt-get)
+    # Локальный Linux ffmpeg может требовать библиотек, которых нет в контейнере
     ffmpeg_paths = [
-        # Локальный Linux ffmpeg (самый приоритетный для bothost.ru)
+        # Системный ffmpeg (установлен через apt-get в Dockerfile)
+        (_FFMPEG_LINUX, "Docker системный /usr/bin/ffmpeg"),
+        (_FFMPEG_LINUX_LOCAL, "Docker системный /usr/local/bin/ffmpeg"),
+        
+        # Локальный Linux ffmpeg (может не работать без библиотек)
+        (_FFMPEG_LOCAL_LINUX, "локальный Linux ffmpeg в папке бота"),
+        
+        # Windows пути (на всякий случай)
+        (_FFMPEG_LOCAL_WIN, "локальный Windows ffmpeg.exe в папке бота"),
+        (_FFMPEG_IN_PARENT_WIN, "Windows ffmpeg из родительской папки"),
+    ]
+elif IS_LINUX:
+    # В Linux (не Docker) сначала ищем локальный, затем системный
+    ffmpeg_paths = [
+        # Локальный Linux ffmpeg
         (_FFMPEG_LOCAL_LINUX, "локальный Linux ffmpeg в папке бота"),
         
         # Linux системные пути
@@ -145,7 +160,7 @@ if IS_DOCKER or IS_LINUX:
         (_FFMPEG_BOTHOST_2, "bothost.ru /usr/bin/ffmpeg"),
         (_FFMPEG_BOTHOST_3, "bothost.ru /opt/ffmpeg/bin/ffmpeg"),
         
-        # Windows пути (на случай Wine или странных конфигураций)
+        # Windows пути
         (_FFMPEG_LOCAL_WIN, "локальный Windows ffmpeg.exe в папке бота"),
         (_FFMPEG_IN_PARENT_WIN, "Windows ffmpeg из родительской папки"),
     ]
@@ -167,12 +182,14 @@ else:
         (_FFMPEG_BOTHOST_3, "bothost.ru /opt/ffmpeg/bin/ffmpeg"),
     ]
 
-# Проверяем все возможные пути
+# Проверяем все возможные пути с проверкой работоспособности
 ffmpeg_found = False
+working_ffmpeg = None
+working_description = None
+
 for path, description in ffmpeg_paths:
     if os.path.exists(path):
-        FFMPEG_EXE = path
-        print(f"✓ Использую {description}: {path}")
+        print(f"🔍 Проверяю {description}: {path}")
         
         # Для Linux файлов проверяем и устанавливаем права на выполнение
         if IS_LINUX or IS_DOCKER:
@@ -181,7 +198,7 @@ for path, description in ffmpeg_paths:
                 # Проверяем права доступа
                 st = os.stat(path)
                 if not (st.st_mode & stat.S_IEXEC):
-                    print(f"  ⚠️ Linux файл не имеет прав на выполнение, устанавливаю...")
+                    print(f"  ⚠️ Файл не имеет прав на выполнение, устанавливаю...")
                     try:
                         os.chmod(path, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
                         print(f"  ✅ Права на выполнение установлены")
@@ -194,22 +211,47 @@ for path, description in ffmpeg_paths:
         try:
             import subprocess
             result = subprocess.run([path, '-version'], 
-                                  capture_output=True, text=True, timeout=2)
+                                  capture_output=True, text=True, timeout=3)
             if result.returncode == 0:
                 version_line = result.stdout.split('\n')[0]
                 print(f"  ✅ FFmpeg работает: {version_line}")
+                working_ffmpeg = path
+                working_description = description
+                ffmpeg_found = True
+                break
             else:
-                print(f"  ⚠️ FFmpeg найден, но не работает: {result.stderr[:100]}")
+                error_msg = result.stderr[:200] if result.stderr else "неизвестная ошибка"
+                print(f"  ⚠️ FFmpeg найден, но не работает: {error_msg}")
+                
+                # Если это ошибка библиотек (libavdevice.so.62), пропускаем этот путь
+                if "libavdevice.so" in error_msg or "cannot open shared object file" in error_msg:
+                    print(f"  ⚠️ Пропускаю из-за ошибки библиотек, пробую следующий путь...")
+                    continue
+                
         except Exception as e:
-            print(f"  ⚠️ Не удалось проверить ffmpeg: {e}")
-        
-        ffmpeg_found = True
-        break
+            error_str = str(e)
+            print(f"  ⚠️ Не удалось проверить ffmpeg: {error_str}")
+            
+            # Если ошибка связана с библиотеками, пропускаем
+            if "libavdevice" in error_str or "shared object" in error_str:
+                print(f"  ⚠️ Пропускаю из-за ошибки библиотек, пробую следующий путь...")
+                continue
 
-if not ffmpeg_found:
-    print("⚠️ Локальный ffmpeg не найден, использую системный (через PATH)")
+# Устанавливаем рабочий ffmpeg или используем системный
+if working_ffmpeg:
+    FFMPEG_EXE = working_ffmpeg
+    print(f"✓ Использую {working_description}: {working_ffmpeg}")
+    ffmpeg_found = True
+elif ffmpeg_found and not working_ffmpeg:
+    # Нашли файл, но он не работает, используем системный
+    print("⚠️ Найденный ffmpeg не работает, использую системный (через PATH)")
+    FFMPEG_EXE = 'ffmpeg'
+else:
+    print("⚠️ Рабочий ffmpeg не найден, использую системный (через PATH)")
+    FFMPEG_EXE = 'ffmpeg'
+    print("   Для Docker: убедитесь, что ffmpeg установлен через apt-get")
     print("   Для Windows: поместите ffmpeg.exe в папку с ботом")
-    print("   Для Linux/Docker: поместите Linux ffmpeg (без расширения) в папку с ботом")
+    print("   Для Linux: поместите рабочий Linux ffmpeg в папку с ботом")
 
 # Check if FFmpeg is available
 def check_ffmpeg():

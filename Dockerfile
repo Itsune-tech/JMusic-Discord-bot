@@ -3,6 +3,12 @@ FROM python:3.11-slim
 # Устанавливаем системные зависимости
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    libavdevice-dev \
+    libavformat-dev \
+    libavcodec-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
     nodejs \
     npm \
     libffi-dev \
@@ -13,8 +19,9 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g deno \
-    && which ffmpeg && echo "✅ FFmpeg установлен в: $(which ffmpeg)" \
-    && ffmpeg -version | head -1
+    && which ffmpeg && echo "✅ Системный FFmpeg установлен в: $(which ffmpeg)" \
+    && ffmpeg -version | head -1 \
+    && echo "✅ Все необходимые библиотеки ffmpeg установлены"
 
 # Создаем рабочую директорию
 WORKDIR /app
