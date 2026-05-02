@@ -125,8 +125,10 @@ FFMPEG_EXE = 'ffmpeg'  # По умолчанию используем систе
 
 # Список путей для проверки (в порядке приоритета)
 ffmpeg_paths = [
-    # Локальные Windows пути
-    (_FFMPEG_LOCAL_WIN, "локальный Windows ffmpeg"),
+    # Самый приоритетный - локальный ffmpeg.exe в папке с ботом
+    (_FFMPEG_LOCAL_WIN, "локальный ffmpeg.exe в папке бота"),
+    
+    # Другие Windows пути
     (_FFMPEG_IN_PARENT_WIN, "Windows ffmpeg из родительской папки"),
     
     # Linux пути (для bothost.ru и Docker)
@@ -143,14 +145,28 @@ for path, description in ffmpeg_paths:
     if os.path.exists(path):
         FFMPEG_EXE = path
         print(f"✓ Использую {description}: {path}")
+        
+        # Проверяем, что ffmpeg действительно работает
+        try:
+            import subprocess
+            result = subprocess.run([path, '-version'], 
+                                  capture_output=True, text=True, timeout=2)
+            if result.returncode == 0:
+                version_line = result.stdout.split('\n')[0]
+                print(f"  ✅ FFmpeg работает: {version_line}")
+            else:
+                print(f"  ⚠️ FFmpeg найден, но не работает: {result.stderr[:100]}")
+        except Exception as e:
+            print(f"  ⚠️ Не удалось проверить ffmpeg: {e}")
+        
         ffmpeg_found = True
         break
 
 if not ffmpeg_found:
     print("⚠️ Локальный ffmpeg не найден, использую системный (через PATH)")
-    print("   Для bothost.ru: попросите администратора установить ffmpeg:")
+    print("   Убедитесь, что ffmpeg.exe находится в папке с ботом")
+    print("   Или попросите администратора bothost.ru установить ffmpeg:")
     print("   sudo apt-get install ffmpeg")
-    print("   Или используйте Docker деплой")
 
 # Check if FFmpeg is available
 def check_ffmpeg():
