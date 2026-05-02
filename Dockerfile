@@ -14,8 +14,10 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     libssl-dev \
     build-essential \
-    && rm -rf /var/lib/apt/lists/* \
-    && which ffmpeg && echo "✅ Системный FFmpeg установлен в: $(which ffmpeg)" \
+    && rm -rf /var/lib/apt/lists/*
+
+# Проверяем что ffmpeg установлен и работает
+RUN which ffmpeg && echo "✅ Системный FFmpeg установлен в: $(which ffmpeg)" \
     && ffmpeg -version | head -1 \
     && echo "✅ Все необходимые библиотеки ffmpeg установлены" \
     && echo "✅ Библиотека Opus установлена (для голосового чата Discord)"
@@ -40,6 +42,9 @@ RUN echo "🔧 Проверка всех зависимостей..." && \
     echo "🔧 Проверка ffmpeg..." && \
     ffmpeg -version | head -3 && \
     echo "✅ FFmpeg работает корректно"
+
+# Запускаем простой тест ffmpeg
+RUN python test_ffmpeg_simple.py
 
 # Запускаем бота
 CMD ["python", "bot.py"]

@@ -178,39 +178,48 @@ IS_LINUX = sys.platform.startswith('linux')
 
 print(f"🔧 Окружение: {'Docker' if IS_DOCKER else 'Не Docker'}, {'Linux' if IS_LINUX else 'Не Linux'}")
 
-# УПРОЩЕННАЯ ЛОГИКА: в Docker используем ТОЛЬКО системный ffmpeg
-# Локальный Linux ffmpeg в Docker почти всегда имеет проблемы с библиотеками
+# ПРОСТАЯ И НАДЕЖНАЯ ЛОГИКА для Docker
 ffmpeg_paths = []
 
 if IS_DOCKER:
-    # В DOCKER: используем ТОЛЬКО системный ffmpeg
-    # Локальный Linux ffmpeg не работает из-за библиотек (libavdevice.so.62 и др.)
-    print("⚠️ В Docker: игнорирую локальный ffmpeg, использую только системный")
+    # В DOCKER: ПРОСТОЙ И НАДЕЖНЫЙ ПОИСК
+    print("🐳 В Docker: использую простую логику поиска ffmpeg")
     
-    ffmpeg_paths = [
-        ('ffmpeg', "Системный ffmpeg (через PATH) - основной"),
-        (_FFMPEG_LINUX, "Linux /usr/bin/ffmpeg"),
-        (_FFMPEG_LINUX_LOCAL, "Linux /usr/local/bin/ffmpeg"),
-        (_FFMPEG_BOTHOST_1, "bothost.ru /usr/local/bin/ffmpeg"),
-        (_FFMPEG_BOTHOST_2, "bothost.ru /usr/bin/ffmpeg"),
-        (_FFMPEG_BOTHOST_3, "bothost.ru /opt/ffmpeg/bin/ffmpeg"),
+    # 1. Сначала пробуем команду 'ffmpeg' (через PATH) - самый надежный способ
+    #    если ffmpeg установлен через apt-get, он будет в PATH
+    ffmpeg_paths.append(('ffmpeg', "Команда 'ffmpeg' через PATH"))
+    
+    # 2. Проверяем стандартные пути где обычно находится ffmpeg
+    standard_paths = [
+        '/usr/bin/ffmpeg',
+        '/usr/local/bin/ffmpeg',
+        '/bin/ffmpeg',
+        '/app/ffmpeg',  # Локальный (последний выбор, обычно не работает)
     ]
+    
+    for path in standard_paths:
+        ffmpeg_paths.append((path, f"Файл {path}"))
+    
+    print(f"   Буду проверять: {', '.join([p[0] for p in ffmpeg_paths])}")
+    
 elif IS_LINUX:
-    # В Linux (не Docker): сначала системный, затем локальный
+    # В Linux (не Docker)
     ffmpeg_paths = [
-        ('ffmpeg', "Системный ffmpeg (через PATH)"),
-        (_FFMPEG_LINUX, "Linux /usr/bin/ffmpeg"),
-        (_FFMPEG_LINUX_LOCAL, "Linux /usr/local/bin/ffmpeg"),
-        (_FFMPEG_BOTHOST_1, "bothost.ru /usr/local/bin/ffmpeg"),
-        (_FFMPEG_BOTHOST_2, "bothost.ru /usr/bin/ffmpeg"),
-        (_FFMPEG_BOTHOST_3, "bothost.ru /opt/ffmpeg/bin/ffmpeg"),
-        (_FFMPEG_LOCAL_LINUX, "Локальный Linux ffmpeg в папке бота (последний выбор)"),
+        ('ffmpeg', "Команда 'ffmpeg' через PATH"),
+        '/usr/bin/ffmpeg',
+        '/usr/local/bin/ffmpeg',
+        '/bin/ffmpeg',
+        _FFMPEG_LOCAL_LINUX,  # Локальный в папке бота
     ]
+    # Преобразуем в формат (путь, описание)
+    ffmpeg_paths = [(p if isinstance(p, str) else p[0], 
+                     p[1] if isinstance(p, tuple) else f"Файл {p}") 
+                    for p in ffmpeg_paths]
 else:
-    # В Windows: сначала локальный .exe, затем системный
+    # В Windows
     ffmpeg_paths = [
-        (_FFMPEG_LOCAL_WIN, "Локальный Windows ffmpeg.exe в папке бота"),
-        ('ffmpeg', "Системный ffmpeg (через PATH)"),
+        (_FFMPEG_LOCAL_WIN, "Локальный Windows ffmpeg.exe"),
+        ('ffmpeg', "Команда 'ffmpeg' через PATH"),
     ]
 
 print(f"🔍 Буду проверять {len(ffmpeg_paths)} путей к ffmpeg")
@@ -264,8 +273,12 @@ for path, description in ffmpeg_paths:
             print(f"  ⚠️ FFmpeg не работает. stderr: {error_msg}")
             print(f"     stdout: {stdout_msg}")
             
-            # Если это ошибка библиотек (libavdevice.so.62), пропускаем этот путь
-            # Также пропускаем если это не Win32 приложение (Linux бинарник на Windows)
+            # В Docker: если это локальный файл с ошибкой библиотек - пропускаем сразу
+            if IS_DOCKER and path == '/app/ffmpeg' and ("libavdevice.so" in error_msg or "cannot open shared object file" in error_msg):
+                print(f"  ⚠️ В Docker: локальный /app/ffmpeg не работает (библиотеки), пропускаю")
+                continue
+            
+            # Общие проверки ошибок библиотек
             skip_keywords = ["libavdevice.so", "cannot open shared object file", "libav", "not a win32", "не является приложением win32"]
             if any(keyword.lower() in error_msg.lower() for keyword in skip_keywords):
                 print(f"  ⚠️ Пропускаю из-за ошибки библиотек/совместимости")
@@ -275,7 +288,12 @@ for path, description in ffmpeg_paths:
         error_str = str(e)
         print(f"  ⚠️ Не удалось запустить ffmpeg: {error_str}")
         
-        # Если ошибка связана с библиотеками, пропускаем
+        # В Docker: если это локальный файл с ошибкой - пропускаем
+        if IS_DOCKER and path == '/app/ffmpeg' and ("libavdevice" in error_str or "shared object" in error_str):
+            print(f"  ⚠️ В Docker: локальный /app/ffmpeg не работает, пропускаю")
+            continue
+        
+        # Общие проверки ошибок библиотек
         if "libavdevice" in error_str or "shared object" in error_str:
             print(f"  ⚠️ Пропускаю из-за ошибки библиотек")
             continue
@@ -287,39 +305,52 @@ if working_ffmpeg:
     ffmpeg_found = True
 else:
     # Не нашли работающий ffmpeg
-    FFMPEG_EXE = 'ffmpeg'  # Последняя попытка: через PATH
-    print("⚠️ Рабочий ffmpeg не найден, использую 'ffmpeg' (через PATH)")
-    print("   Это сработает если ffmpeg установлен в системе")
+    print("⚠️ Рабочий ffmpeg не найден после проверки всех путей")
     
-    # Проверяем работает ли 'ffmpeg' через PATH
-    import subprocess
-    try:
-        result = subprocess.run(['ffmpeg', '-version'], 
-                              capture_output=True, text=True, timeout=3)
-        if result.returncode == 0:
-            version_line = result.stdout.split('\n')[0]
-            print(f"✓ 'ffmpeg' через PATH работает: {version_line}")
-            ffmpeg_found = True
-        else:
-            error_msg = result.stderr[:200] if result.stderr else "нет вывода"
-            stdout_msg = result.stdout[:100] if result.stdout else "нет вывода"
-            print(f"⚠️ 'ffmpeg' через PATH не работает")
-            print(f"   stderr: {error_msg}")
-            print(f"   stdout: {stdout_msg}")
-    except Exception as e:
-        print(f"⚠️ Не удалось проверить 'ffmpeg' через PATH: {e}")
+    # В Docker: ПРОСТО ИСПОЛЬЗУЕМ 'ffmpeg' (через PATH)
+    if IS_DOCKER:
+        print("🐳 В Docker: использую 'ffmpeg' через PATH (самый надежный способ)")
+        FFMPEG_EXE = 'ffmpeg'
+        
+        # Проверяем работает ли
+        import subprocess
+        try:
+            result = subprocess.run(['ffmpeg', '-version'], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                version_line = result.stdout.split('\n')[0]
+                print(f"✅ 'ffmpeg' работает: {version_line}")
+                ffmpeg_found = True
+            else:
+                error_msg = result.stderr[:200] if result.stderr else "нет вывода"
+                print(f"❌ 'ffmpeg' не работает: {error_msg}")
+                print("   Убедитесь что в Dockerfile есть: RUN apt-get install -y ffmpeg")
+        except Exception as e:
+            print(f"❌ Не удалось запустить 'ffmpeg': {e}")
+    else:
+        # Не Docker: последняя попытка
+        FFMPEG_EXE = 'ffmpeg'
+        print(f"🔄 Последняя попытка: использую 'ffmpeg' через PATH")
+        
+        import subprocess
+        try:
+            result = subprocess.run(['ffmpeg', '-version'], 
+                                  capture_output=True, text=True, timeout=3)
+            if result.returncode == 0:
+                version_line = result.stdout.split('\n')[0]
+                print(f"✓ 'ffmpeg' через PATH работает: {version_line}")
+                ffmpeg_found = True
+            else:
+                error_msg = result.stderr[:200] if result.stderr else "нет вывода"
+                print(f"❌ 'ffmpeg' через PATH не работает: {error_msg}")
+        except Exception as e:
+            print(f"❌ Не удалось запустить 'ffmpeg': {e}")
     
     if not ffmpeg_found:
-        print("❌ FFmpeg не найден!")
-        print("   В Docker: убедитесь что 'apt-get install ffmpeg' выполнен в Dockerfile")
-        print("   В Linux: установите ffmpeg через пакетный менеджер")
-        print("   Или поместите рабочий ffmpeg в папку с ботом")
-        
-        # Пытаемся использовать локальный файл даже если он не прошел проверку
-        # (последняя попытка)
-        if os.path.exists(_FFMPEG_LOCAL_LINUX):
-            print(f"🔄 Последняя попытка: использую локальный файл {_FFMPEG_LOCAL_LINUX}")
-            FFMPEG_EXE = _FFMPEG_LOCAL_LINUX
+        print("❌ FFmpeg не найден или не работает!")
+        print("   В Docker: убедитесь что в Dockerfile есть:")
+        print("     RUN apt-get update && apt-get install -y ffmpeg")
+        print("   И пересоберите контейнер")
 
 # Check if FFmpeg is available
 def check_ffmpeg():
