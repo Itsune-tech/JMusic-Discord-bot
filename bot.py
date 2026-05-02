@@ -178,29 +178,18 @@ IS_LINUX = sys.platform.startswith('linux')
 
 print(f"🔧 Окружение: {'Docker' if IS_DOCKER else 'Не Docker'}, {'Linux' if IS_LINUX else 'Не Linux'}")
 
-# ПРОСТАЯ И НАДЕЖНАЯ ЛОГИКА для Docker
+# САМАЯ ПРОСТАЯ ЛОГИКА: в Docker используем ТОЛЬКО 'ffmpeg' через PATH
 ffmpeg_paths = []
 
 if IS_DOCKER:
-    # В DOCKER: ПРОСТОЙ И НАДЕЖНЫЙ ПОИСК
-    print("🐳 В Docker: использую простую логику поиска ffmpeg")
+    # В DOCKER: ТОЛЬКО 'ffmpeg' через PATH
+    # Локальный /app/ffmpeg не работает из-за библиотек
+    print("🐳 В Docker: использую ТОЛЬКО 'ffmpeg' через PATH")
+    print("   Локальный /app/ffmpeg игнорируется (проблемы с библиотеками)")
     
-    # 1. Сначала пробуем команду 'ffmpeg' (через PATH) - самый надежный способ
-    #    если ffmpeg установлен через apt-get, он будет в PATH
-    ffmpeg_paths.append(('ffmpeg', "Команда 'ffmpeg' через PATH"))
-    
-    # 2. Проверяем стандартные пути где обычно находится ffmpeg
-    standard_paths = [
-        '/usr/bin/ffmpeg',
-        '/usr/local/bin/ffmpeg',
-        '/bin/ffmpeg',
-        '/app/ffmpeg',  # Локальный (последний выбор, обычно не работает)
+    ffmpeg_paths = [
+        ('ffmpeg', "Команда 'ffmpeg' через PATH - ЕДИНСТВЕННЫЙ вариант в Docker"),
     ]
-    
-    for path in standard_paths:
-        ffmpeg_paths.append((path, f"Файл {path}"))
-    
-    print(f"   Буду проверять: {', '.join([p[0] for p in ffmpeg_paths])}")
     
 elif IS_LINUX:
     # В Linux (не Docker)
@@ -208,7 +197,6 @@ elif IS_LINUX:
         ('ffmpeg', "Команда 'ffmpeg' через PATH"),
         '/usr/bin/ffmpeg',
         '/usr/local/bin/ffmpeg',
-        '/bin/ffmpeg',
         _FFMPEG_LOCAL_LINUX,  # Локальный в папке бота
     ]
     # Преобразуем в формат (путь, описание)
@@ -387,12 +375,16 @@ else:
     print("✅ FFmpeg готов к работе!")
 print("=" * 60)
 
-# Создаем безопасные FFMPEG_OPTIONS
-# Если FFMPEG_EXE это просто 'ffmpeg' (команда в PATH), не проверяем os.path.exists
-safe_ffmpeg_exe = FFMPEG_EXE
-if safe_ffmpeg_exe != 'ffmpeg' and not os.path.exists(safe_ffmpeg_exe):
-    print(f"⚠️ FFMPEG_EXE не существует как файл: {safe_ffmpeg_exe}, использую 'ffmpeg'")
+# Создаем FFMPEG_OPTIONS
+# В Docker всегда используем 'ffmpeg' (через PATH)
+if IS_DOCKER:
+    print("🐳 В Docker: FFMPEG_OPTIONS использует 'ffmpeg' через PATH")
     safe_ffmpeg_exe = 'ffmpeg'
+else:
+    safe_ffmpeg_exe = FFMPEG_EXE
+    if safe_ffmpeg_exe != 'ffmpeg' and not os.path.exists(safe_ffmpeg_exe):
+        print(f"⚠️ FFMPEG_EXE не существует как файл: {safe_ffmpeg_exe}, использую 'ffmpeg'")
+        safe_ffmpeg_exe = 'ffmpeg'
 
 FFMPEG_OPTIONS = {
     'executable': safe_ffmpeg_exe,
@@ -736,14 +728,15 @@ class MusicCog(commands.Cog):
                     pass
 
             # Для TTS используем специальные настройки FFmpeg
-            # Используем FFMPEG_EXE, который уже должен быть правильным путем
-            tts_ffmpeg_exe = FFMPEG_EXE
-            
-            # Если FFMPEG_EXE это просто 'ffmpeg' (команда в PATH), не проверяем os.path.exists
-            # потому что os.path.exists('ffmpeg') вернет False для команд в PATH
-            if tts_ffmpeg_exe != 'ffmpeg' and not os.path.exists(tts_ffmpeg_exe):
-                print(f"⚠️ FFMPEG_EXE не существует как файл: {tts_ffmpeg_exe}, использую 'ffmpeg'")
+            # В Docker всегда используем 'ffmpeg' через PATH
+            if IS_DOCKER:
                 tts_ffmpeg_exe = 'ffmpeg'
+                print(f"🐳 В Docker TTS: использую 'ffmpeg' через PATH")
+            else:
+                tts_ffmpeg_exe = FFMPEG_EXE
+                if tts_ffmpeg_exe != 'ffmpeg' and not os.path.exists(tts_ffmpeg_exe):
+                    print(f"⚠️ FFMPEG_EXE не существует как файл: {tts_ffmpeg_exe}, использую 'ffmpeg'")
+                    tts_ffmpeg_exe = 'ffmpeg'
             
             tts_ffmpeg_options = {
                 'executable': tts_ffmpeg_exe,

@@ -43,8 +43,10 @@ RUN echo "🔧 Проверка всех зависимостей..." && \
     ffmpeg -version | head -3 && \
     echo "✅ FFmpeg работает корректно"
 
-# Запускаем простой тест ffmpeg
-RUN python test_ffmpeg_simple.py
+# Проверяем что ffmpeg доступен для Python кода
+RUN echo "🔧 Финальная проверка ffmpeg..." && \
+    python -c "import subprocess; result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True); print('FFmpeg версия:', result.stdout.split('\\n')[0] if result.returncode == 0 else 'Ошибка:', result.stderr[:100])" && \
+    python test_ffmpeg_final.py
 
 # Запускаем бота
 CMD ["python", "bot.py"]
