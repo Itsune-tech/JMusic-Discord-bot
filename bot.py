@@ -7,6 +7,13 @@ import json
 import os
 import sys
 
+# Глобальный обработчик исключений для отладки
+import traceback
+
+def log_error(msg):
+    print(f"❌ ОШИБКА: {msg}")
+    traceback.print_exc()
+
 print("=" * 60)
 print("🚀 ЗАПУСК JMusic Discord Bot")
 print(f"Python: {sys.version}")
@@ -137,6 +144,13 @@ _FFMPEG_BOTHOST_3 = '/opt/ffmpeg/bin/ffmpeg'
 print(f"📁 Текущая директория бота: {_HERE}")
 print(f"🔍 Ищу ffmpeg в: {_FFMPEG_LOCAL_LINUX}")
 
+# Принудительно выводим список файлов в директории для отладки
+try:
+    files = os.listdir(_HERE)
+    print(f"📂 Файлы в директории бота: {', '.join(files[:10])}" + ("..." if len(files) > 10 else ""))
+except Exception as e:
+    print(f"⚠️ Не удалось прочитать директорию: {e}")
+
 FFMPEG_EXE = 'ffmpeg'  # По умолчанию используем системный (через PATH)
 
 # Определяем, работаем ли мы в Docker/Linux окружении
@@ -206,8 +220,9 @@ for path, description in ffmpeg_paths:
     # Проверяем, что ffmpeg действительно работает
     try:
         import subprocess
+        print(f"  🧪 Запускаю: {path} -version")
         result = subprocess.run([path, '-version'], 
-                              capture_output=True, text=True, timeout=3)
+                              capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             version_line = result.stdout.split('\n')[0]
             print(f"  ✅ FFmpeg работает: {version_line}")
@@ -217,22 +232,24 @@ for path, description in ffmpeg_paths:
             break
         else:
             error_msg = result.stderr[:200] if result.stderr else "неизвестная ошибка"
-            print(f"  ⚠️ FFmpeg найден, но не работает: {error_msg}")
+            stdout_msg = result.stdout[:100] if result.stdout else "нет вывода"
+            print(f"  ⚠️ FFmpeg не работает. stderr: {error_msg}")
+            print(f"     stdout: {stdout_msg}")
             
             # Если это ошибка библиотек (libavdevice.so.62), пропускаем этот путь
             # Также пропускаем если это не Win32 приложение (Linux бинарник на Windows)
             skip_keywords = ["libavdevice.so", "cannot open shared object file", "libav", "not a win32", "не является приложением win32"]
             if any(keyword.lower() in error_msg.lower() for keyword in skip_keywords):
-                print(f"  ⚠️ Пропускаю из-за ошибки библиотек/совместимости: {error_msg[:100]}...")
+                print(f"  ⚠️ Пропускаю из-за ошибки библиотек/совместимости")
                 continue
             
     except Exception as e:
         error_str = str(e)
-        print(f"  ⚠️ Не удалось проверить ffmpeg: {error_str}")
+        print(f"  ⚠️ Не удалось запустить ffmpeg: {error_str}")
         
         # Если ошибка связана с библиотеками, пропускаем
         if "libavdevice" in error_str or "shared object" in error_str:
-            print(f"  ⚠️ Пропускаю из-за ошибки библиотек, пробую следующий путь...")
+            print(f"  ⚠️ Пропускаю из-за ошибки библиотек")
             continue
 
 # Устанавливаем рабочий ffmpeg
@@ -256,7 +273,11 @@ else:
             print(f"✓ 'ffmpeg' через PATH работает: {version_line}")
             ffmpeg_found = True
         else:
-            print(f"⚠️ 'ffmpeg' через PATH не работает: {result.stderr[:100]}")
+            error_msg = result.stderr[:200] if result.stderr else "нет вывода"
+            stdout_msg = result.stdout[:100] if result.stdout else "нет вывода"
+            print(f"⚠️ 'ffmpeg' через PATH не работает")
+            print(f"   stderr: {error_msg}")
+            print(f"   stdout: {stdout_msg}")
     except Exception as e:
         print(f"⚠️ Не удалось проверить 'ffmpeg' через PATH: {e}")
     
@@ -265,6 +286,12 @@ else:
         print("   В Docker: убедитесь что 'apt-get install ffmpeg' выполнен в Dockerfile")
         print("   В Linux: установите ffmpeg через пакетный менеджер")
         print("   Или поместите рабочий ffmpeg в папку с ботом")
+        
+        # Пытаемся использовать локальный файл даже если он не прошел проверку
+        # (последняя попытка)
+        if os.path.exists(_FFMPEG_LOCAL_LINUX):
+            print(f"🔄 Последняя попытка: использую локальный файл {_FFMPEG_LOCAL_LINUX}")
+            FFMPEG_EXE = _FFMPEG_LOCAL_LINUX
 
 # Check if FFmpeg is available
 def check_ffmpeg():
@@ -892,4 +919,12 @@ class MusicCog(commands.Cog):
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == '__main__':
-    bot.run(config['api_key'])
+    print("=" * 60)
+    print("🎯 ЗАПУСКАЮ БОТА")
+    print("=" * 60)
+    try:
+        bot.run(config['api_key'])
+    except Exception as e:
+        print(f"❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ ЗАПУСКЕ БОТА: {e}")
+        traceback.print_exc()
+        raise
