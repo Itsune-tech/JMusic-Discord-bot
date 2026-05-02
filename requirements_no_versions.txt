@@ -1,5 +1,0 @@
-discord.py
-PyNaCl
-yt-dlp
-gTTS
-ffmpeg-python

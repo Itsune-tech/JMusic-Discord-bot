@@ -112,6 +112,7 @@ else:
 # ── FFmpeg — check local folder first, then rely on PATH ──────────────────────
 # Проверяем наличие ffmpeg в разных местах (кросс-платформенный поиск)
 _FFMPEG_LOCAL_WIN = os.path.join(_HERE, 'ffmpeg.exe')
+_FFMPEG_LOCAL_LINUX = os.path.join(_HERE, 'ffmpeg')  # Linux бинарник без расширения
 _FFMPEG_IN_PARENT_WIN = os.path.join(_HERE, '..', 'ffmpeg-master-latest-win64-gpl', 'bin', 'ffmpeg.exe')
 _FFMPEG_LINUX = '/usr/bin/ffmpeg'
 _FFMPEG_LINUX_LOCAL = '/usr/local/bin/ffmpeg'
@@ -123,21 +124,48 @@ _FFMPEG_BOTHOST_3 = '/opt/ffmpeg/bin/ffmpeg'
 
 FFMPEG_EXE = 'ffmpeg'  # По умолчанию используем системный (через PATH)
 
+# Определяем, работаем ли мы в Docker/Linux окружении
+IS_DOCKER = os.path.exists('/.dockerenv') or os.path.exists('/run/.containerenv')
+IS_LINUX = sys.platform.startswith('linux')
+
+print(f"🔧 Окружение: {'Docker' if IS_DOCKER else 'Не Docker'}, {'Linux' if IS_LINUX else 'Не Linux'}")
+
 # Список путей для проверки (в порядке приоритета)
-ffmpeg_paths = [
-    # Самый приоритетный - локальный ffmpeg.exe в папке с ботом
-    (_FFMPEG_LOCAL_WIN, "локальный ffmpeg.exe в папке бота"),
-    
-    # Другие Windows пути
-    (_FFMPEG_IN_PARENT_WIN, "Windows ffmpeg из родительской папки"),
-    
-    # Linux пути (для bothost.ru и Docker)
-    (_FFMPEG_BOTHOST_1, "bothost.ru /usr/local/bin/ffmpeg"),
-    (_FFMPEG_BOTHOST_2, "bothost.ru /usr/bin/ffmpeg"),
-    (_FFMPEG_BOTHOST_3, "bothost.ru /opt/ffmpeg/bin/ffmpeg"),
-    (_FFMPEG_LINUX, "Linux /usr/bin/ffmpeg"),
-    (_FFMPEG_LINUX_LOCAL, "Linux /usr/local/bin/ffmpeg"),
-]
+# Приоритет зависит от окружения
+if IS_DOCKER or IS_LINUX:
+    # В Docker/Linux сначала ищем локальный Linux ffmpeg, затем системный
+    ffmpeg_paths = [
+        # Локальный Linux ffmpeg (самый приоритетный для bothost.ru)
+        (_FFMPEG_LOCAL_LINUX, "локальный Linux ffmpeg в папке бота"),
+        
+        # Linux системные пути
+        (_FFMPEG_LINUX, "Linux /usr/bin/ffmpeg"),
+        (_FFMPEG_LINUX_LOCAL, "Linux /usr/local/bin/ffmpeg"),
+        (_FFMPEG_BOTHOST_1, "bothost.ru /usr/local/bin/ffmpeg"),
+        (_FFMPEG_BOTHOST_2, "bothost.ru /usr/bin/ffmpeg"),
+        (_FFMPEG_BOTHOST_3, "bothost.ru /opt/ffmpeg/bin/ffmpeg"),
+        
+        # Windows пути (на случай Wine или странных конфигураций)
+        (_FFMPEG_LOCAL_WIN, "локальный Windows ffmpeg.exe в папке бота"),
+        (_FFMPEG_IN_PARENT_WIN, "Windows ffmpeg из родительской папки"),
+    ]
+else:
+    # В Windows сначала ищем локальный ffmpeg.exe
+    ffmpeg_paths = [
+        # Локальные Windows пути
+        (_FFMPEG_LOCAL_WIN, "локальный Windows ffmpeg.exe в папке бота"),
+        (_FFMPEG_IN_PARENT_WIN, "Windows ffmpeg из родительской папки"),
+        
+        # Локальный Linux ffmpeg (на случай WSL)
+        (_FFMPEG_LOCAL_LINUX, "локальный Linux ffmpeg в папке бота"),
+        
+        # Linux системные пути
+        (_FFMPEG_LINUX, "Linux /usr/bin/ffmpeg"),
+        (_FFMPEG_LINUX_LOCAL, "Linux /usr/local/bin/ffmpeg"),
+        (_FFMPEG_BOTHOST_1, "bothost.ru /usr/local/bin/ffmpeg"),
+        (_FFMPEG_BOTHOST_2, "bothost.ru /usr/bin/ffmpeg"),
+        (_FFMPEG_BOTHOST_3, "bothost.ru /opt/ffmpeg/bin/ffmpeg"),
+    ]
 
 # Проверяем все возможные пути
 ffmpeg_found = False
@@ -145,6 +173,22 @@ for path, description in ffmpeg_paths:
     if os.path.exists(path):
         FFMPEG_EXE = path
         print(f"✓ Использую {description}: {path}")
+        
+        # Для Linux файлов проверяем и устанавливаем права на выполнение
+        if IS_LINUX or IS_DOCKER:
+            try:
+                import stat
+                # Проверяем права доступа
+                st = os.stat(path)
+                if not (st.st_mode & stat.S_IEXEC):
+                    print(f"  ⚠️ Linux файл не имеет прав на выполнение, устанавливаю...")
+                    try:
+                        os.chmod(path, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+                        print(f"  ✅ Права на выполнение установлены")
+                    except Exception as e:
+                        print(f"  ⚠️ Не удалось установить права: {e}")
+            except Exception as e:
+                print(f"  ⚠️ Не удалось проверить права файла: {e}")
         
         # Проверяем, что ffmpeg действительно работает
         try:
@@ -164,9 +208,8 @@ for path, description in ffmpeg_paths:
 
 if not ffmpeg_found:
     print("⚠️ Локальный ffmpeg не найден, использую системный (через PATH)")
-    print("   Убедитесь, что ffmpeg.exe находится в папке с ботом")
-    print("   Или попросите администратора bothost.ru установить ffmpeg:")
-    print("   sudo apt-get install ffmpeg")
+    print("   Для Windows: поместите ffmpeg.exe в папку с ботом")
+    print("   Для Linux/Docker: поместите Linux ffmpeg (без расширения) в папку с ботом")
 
 # Check if FFmpeg is available
 def check_ffmpeg():
@@ -200,11 +243,20 @@ else:
     print("✅ FFmpeg готов к работе!")
 print("=" * 60)
 
+# Создаем безопасные FFMPEG_OPTIONS
+# Если FFMPEG_EXE не существует, используем просто 'ffmpeg' (через PATH)
+safe_ffmpeg_exe = FFMPEG_EXE
+if not os.path.exists(safe_ffmpeg_exe):
+    print(f"⚠️ FFMPEG_EXE не существует: {safe_ffmpeg_exe}, использую 'ffmpeg'")
+    safe_ffmpeg_exe = 'ffmpeg'
+
 FFMPEG_OPTIONS = {
-    'executable': FFMPEG_EXE,
+    'executable': safe_ffmpeg_exe,
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
     'options': '-vn'
 }
+
+print(f"🔧 FFMPEG_OPTIONS использует: {safe_ffmpeg_exe}")
 
 YDL_OPTIONS = {
     'format': 'bestaudio/best',
@@ -484,10 +536,19 @@ class MusicCog(commands.Cog):
                 except Exception:
                     pass
 
-            source = discord.FFmpegPCMAudio(
-                tmp_path,
-                executable=FFMPEG_EXE
-            )
+            # Для TTS используем специальные настройки FFmpeg
+            # Проверяем, существует ли FFMPEG_EXE, если нет - используем 'ffmpeg'
+            tts_ffmpeg_exe = FFMPEG_EXE
+            if not os.path.exists(tts_ffmpeg_exe):
+                print(f"⚠️ FFMPEG_EXE не существует: {tts_ffmpeg_exe}, использую 'ffmpeg'")
+                tts_ffmpeg_exe = 'ffmpeg'
+            
+            tts_ffmpeg_options = {
+                'executable': tts_ffmpeg_exe,
+                'options': '-vn'
+            }
+            
+            source = discord.FFmpegPCMAudio(tmp_path, **tts_ffmpeg_options)
             vc.play(source, after=cleanup)
 
             preview = text if len(text) <= 60 else text[:60] + '…'
@@ -500,6 +561,7 @@ class MusicCog(commands.Cog):
             await interaction.followup.send(embed=embed)
 
         except Exception as e:
+            print(f"[TTS ERROR] {e}")
             await interaction.followup.send(f'❌ TTS error: {e}', ephemeral=True)
 
     # ── /playlist ─────────────────────────────────────────────────────────────
