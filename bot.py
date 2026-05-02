@@ -110,20 +110,47 @@ else:
         exit(1)
 
 # ── FFmpeg — check local folder first, then rely on PATH ──────────────────────
-# Проверяем наличие ffmpeg в разных местах
-_FFMPEG_LOCAL = os.path.join(_HERE, 'ffmpeg.exe')
-_FFMPEG_IN_PARENT = os.path.join(_HERE, '..', 'ffmpeg-master-latest-win64-gpl', 'bin', 'ffmpeg.exe')
+# Проверяем наличие ffmpeg в разных местах (кросс-платформенный поиск)
+_FFMPEG_LOCAL_WIN = os.path.join(_HERE, 'ffmpeg.exe')
+_FFMPEG_IN_PARENT_WIN = os.path.join(_HERE, '..', 'ffmpeg-master-latest-win64-gpl', 'bin', 'ffmpeg.exe')
+_FFMPEG_LINUX = '/usr/bin/ffmpeg'
+_FFMPEG_LINUX_LOCAL = '/usr/local/bin/ffmpeg'
 
-FFMPEG_EXE = 'ffmpeg'  # По умолчанию используем системный
+# Специальные пути для bothost.ru (если ffmpeg предустановлен)
+_FFMPEG_BOTHOST_1 = '/usr/local/bin/ffmpeg'
+_FFMPEG_BOTHOST_2 = '/usr/bin/ffmpeg'
+_FFMPEG_BOTHOST_3 = '/opt/ffmpeg/bin/ffmpeg'
 
-if os.path.exists(_FFMPEG_LOCAL):
-    FFMPEG_EXE = _FFMPEG_LOCAL
-    print(f"✓ Использую локальный ffmpeg: {_FFMPEG_LOCAL}")
-elif os.path.exists(_FFMPEG_IN_PARENT):
-    FFMPEG_EXE = _FFMPEG_IN_PARENT
-    print(f"✓ Использую ffmpeg из родительской папки: {_FFMPEG_IN_PARENT}")
-else:
-    print("⚠️ Локальный ffmpeg не найден, использую системный")
+FFMPEG_EXE = 'ffmpeg'  # По умолчанию используем системный (через PATH)
+
+# Список путей для проверки (в порядке приоритета)
+ffmpeg_paths = [
+    # Локальные Windows пути
+    (_FFMPEG_LOCAL_WIN, "локальный Windows ffmpeg"),
+    (_FFMPEG_IN_PARENT_WIN, "Windows ffmpeg из родительской папки"),
+    
+    # Linux пути (для bothost.ru и Docker)
+    (_FFMPEG_BOTHOST_1, "bothost.ru /usr/local/bin/ffmpeg"),
+    (_FFMPEG_BOTHOST_2, "bothost.ru /usr/bin/ffmpeg"),
+    (_FFMPEG_BOTHOST_3, "bothost.ru /opt/ffmpeg/bin/ffmpeg"),
+    (_FFMPEG_LINUX, "Linux /usr/bin/ffmpeg"),
+    (_FFMPEG_LINUX_LOCAL, "Linux /usr/local/bin/ffmpeg"),
+]
+
+# Проверяем все возможные пути
+ffmpeg_found = False
+for path, description in ffmpeg_paths:
+    if os.path.exists(path):
+        FFMPEG_EXE = path
+        print(f"✓ Использую {description}: {path}")
+        ffmpeg_found = True
+        break
+
+if not ffmpeg_found:
+    print("⚠️ Локальный ffmpeg не найден, использую системный (через PATH)")
+    print("   Для bothost.ru: попросите администратора установить ffmpeg:")
+    print("   sudo apt-get install ffmpeg")
+    print("   Или используйте Docker деплой")
 
 # Check if FFmpeg is available
 def check_ffmpeg():
@@ -133,15 +160,29 @@ def check_ffmpeg():
         result = subprocess.run([FFMPEG_EXE, '-version'], 
                               capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
-            print(f"✓ FFmpeg доступен: {result.stdout.split()[2]}")
+            version_line = result.stdout.split('\n')[0]
+            print(f"✓ FFmpeg доступен: {version_line}")
             return True
-    except (subprocess.SubprocessError, FileNotFoundError, OSError):
-        print("✗ FFmpeg не найден. Установите FFmpeg для работы бота.")
+        else:
+            print(f"✗ FFmpeg вернул ошибку: {result.stderr[:100]}")
+            return False
+    except (subprocess.SubprocessError, FileNotFoundError, OSError) as e:
+        print(f"✗ FFmpeg не найден или ошибка: {e}")
+        print(f"  Искал по пути: {FFMPEG_EXE}")
         print("Ссылка для скачивания: https://ffmpeg.org/download.html")
         return False
 
-if not check_ffmpeg():
-    print("Бот может не работать без FFmpeg!")
+# Проверяем ffmpeg при запуске
+print("=" * 60)
+print("🔧 ПРОВЕРКА FFMPEG")
+print("=" * 60)
+ffmpeg_available = check_ffmpeg()
+if not ffmpeg_available:
+    print("❌ FFmpeg не найден! Бот не сможет воспроизводить музыку.")
+    print("   Установите ffmpeg или убедитесь, что он есть в PATH.")
+else:
+    print("✅ FFmpeg готов к работе!")
+print("=" * 60)
 
 FFMPEG_OPTIONS = {
     'executable': FFMPEG_EXE,

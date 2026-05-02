@@ -14,12 +14,35 @@ if "%DISCORD_TOKEN%"=="" (
 )
 
 echo Проверка зависимостей...
-python -c "import discord; import nacl; import yt_dlp; print('✅ Зависимости установлены')" 2>nul
+python -c "import discord; import nacl; import yt_dlp; print('✅ Основные зависимости установлены')" 2>nul
 if errorlevel 1 (
     echo Установка зависимостей...
     pip install -r requirements.txt
 )
 
+echo Проверка ffmpeg...
+where ffmpeg >nul 2>nul
+if errorlevel 1 (
+    if exist ffmpeg.exe (
+        echo ✅ Использую локальный ffmpeg.exe
+    ) else (
+        echo ❌ FFmpeg не найден!
+        echo Бот не сможет воспроизводить музыку без ffmpeg.
+        echo Запустите install_ffmpeg.bat для установки ffmpeg.
+        echo.
+        echo Продолжить без ffmpeg? (y/n)
+        choice /c yn /n /m "Выберите действие:"
+        if errorlevel 2 (
+            echo Отмена запуска.
+            pause
+            exit /b 1
+        )
+    )
+) else (
+    echo ✅ FFmpeg найден в системе
+)
+
+echo.
 echo Запуск бота...
 python bot.py
 pause

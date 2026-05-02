@@ -1,5 +1,11 @@
 # JMusic Discord Bot - Деплой на bothost.ru
 
+## ⚠️ ВАЖНО: Проблема с ffmpeg
+Хост bothost.ru не загружает exe файлы через репозиторий, поэтому **ffmpeg.exe нельзя загрузить напрямую**.
+
+## РЕШЕНИЕ: Используйте Docker!
+Docker автоматически установит ffmpeg внутри контейнера, что решает проблему.
+
 ## Краткое описание
 
 Этот бот предоставляет функционал воспроизведения музыки в Discord с поддержкой:
@@ -8,6 +14,43 @@
 - Система плейлистов
 - TTS (текст в речь)
 - Голосовые команды
+
+## Рекомендуемый способ: Docker деплой
+
+### 1. Подготовка файлов
+Убедитесь, что в репозитории есть:
+- `Dockerfile` - установит ffmpeg автоматически
+- `requirements.txt` - Python зависимости
+- `bot.py` - основной код
+- `.env.example` - шаблон конфигурации
+
+### 2. На bothost.ru:
+```bash
+# Сборка Docker образа (установит ffmpeg внутри)
+docker build -t jmusic-bot .
+
+# Запуск с токеном
+docker run -d --name jmusic-bot --restart unless-stopped -e DISCORD_TOKEN="ваш_токен" jmusic-bot
+```
+
+### 3. Или через docker-compose
+```bash
+# Создайте .env файл с токеном
+echo "DISCORD_TOKEN=ваш_токен" > .env
+
+# Запуск
+docker-compose up -d
+```
+
+## Альтернатива: Ручная установка ffmpeg на хосте
+Если Docker недоступен, нужно чтобы администратор bothost.ru установил ffmpeg вручную:
+```bash
+# На Linux хосте
+sudo apt-get install ffmpeg
+
+# Или
+sudo yum install ffmpeg
+```
 
 ## Быстрый старт для bothost.ru
 
@@ -22,7 +65,34 @@ cd "JMusic Discord bot"
 pip install -r requirements.txt
 ```
 
-### 3. Настройка токена бота
+### 3. Установка FFmpeg (ОБЯЗАТЕЛЬНО!)
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt-get install ffmpeg
+```
+
+**Linux (CentOS/RHEL):**
+```bash
+sudo yum install ffmpeg
+```
+
+**Windows:**
+- Скачайте ffmpeg с https://ffmpeg.org/download.html
+- Поместите `ffmpeg.exe` в папку с ботом
+- Или запустите `install_ffmpeg.bat`
+
+**Или используйте скрипт:**
+```bash
+# Linux/macOS
+chmod +x install_ffmpeg.sh
+./install_ffmpeg.sh
+
+# Windows
+install_ffmpeg.bat
+```
+
+### 4. Настройка токена бота
 
 **Вариант A: Через переменную окружения**
 ```bash
@@ -43,9 +113,19 @@ echo "DISCORD_TOKEN=ваш_токен_бота" > .env
 }
 ```
 
-### 4. Запуск бота
+### 5. Проверка окружения
+```bash
+python check_environment.py
+```
+
+### 6. Запуск бота
 ```bash
 python bot.py
+```
+
+**Или для Windows:**
+```bash
+run_bothost.bat
 ```
 
 ## Решение проблем

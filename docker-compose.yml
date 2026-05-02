@@ -4,12 +4,12 @@ services:
   jmusic-bot:
     build: .
     container_name: jmusic-discord-bot
+    restart: unless-stopped
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
-    restart: unless-stopped
+      - TZ=UTC
     volumes:
-      - ./playlists.json:/app/playlists.json
-      - ./config.json:/app/config.json
+      - ./data:/app/data
     logging:
       driver: "json-file"
       options:
