@@ -99,6 +99,25 @@ try:
 except ImportError:
     print("❌ PyNaCl не установлен! Голосовой функционал не будет работать!")
     print("   Установите: pip install pynacl")
+
+# Проверка Opus библиотеки
+try:
+    import discord.opus
+    if discord.opus.is_loaded():
+        print("✅ Библиотека Opus загружена (для голосового чата)")
+    else:
+        print("⚠️ Библиотека Opus не загружена, попробую загрузить...")
+        try:
+            discord.opus.load_opus('libopus.so.0')
+            if discord.opus.is_loaded():
+                print("✅ Библиотека Opus успешно загружена")
+            else:
+                print("❌ Не удалось загрузить библиотеку Opus")
+                print("   В Docker: установите libopus-dev")
+        except Exception as e:
+            print(f"❌ Ошибка загрузки Opus: {e}")
+except Exception as e:
+    print(f"⚠️ Не удалось проверить Opus: {e}")
     
 print("=" * 60)
 
@@ -159,31 +178,40 @@ IS_LINUX = sys.platform.startswith('linux')
 
 print(f"🔧 Окружение: {'Docker' if IS_DOCKER else 'Не Docker'}, {'Linux' if IS_LINUX else 'Не Linux'}")
 
-# УПРОЩЕННАЯ ЛОГИКА: всегда сначала ищем в папке с ботом, затем в системе
-# Это работает для всех платформ
+# УПРОЩЕННАЯ ЛОГИКА: в Docker используем ТОЛЬКО системный ffmpeg
+# Локальный Linux ffmpeg в Docker почти всегда имеет проблемы с библиотеками
 ffmpeg_paths = []
 
-# 1. Сначала ищем в той же папке что и бот (самый надежный способ)
-if IS_LINUX or IS_DOCKER:
-    # Для Linux/Docker: ищем Linux ffmpeg бинарник
-    ffmpeg_paths.append((_FFMPEG_LOCAL_LINUX, "Локальный Linux ffmpeg в папке бота"))
-else:
-    # Для Windows: ищем Windows ffmpeg.exe
-    ffmpeg_paths.append((_FFMPEG_LOCAL_WIN, "Локальный Windows ffmpeg.exe в папке бота"))
-
-# 2. Затем ищем системный ffmpeg (через PATH)
-# Это работает на всех платформах если ffmpeg установлен в системе
-ffmpeg_paths.append(('ffmpeg', "Системный ffmpeg (через PATH)"))
-
-# 3. Стандартные системные пути (для Linux/Docker)
-if IS_LINUX or IS_DOCKER:
-    ffmpeg_paths.extend([
+if IS_DOCKER:
+    # В DOCKER: используем ТОЛЬКО системный ffmpeg
+    # Локальный Linux ffmpeg не работает из-за библиотек (libavdevice.so.62 и др.)
+    print("⚠️ В Docker: игнорирую локальный ffmpeg, использую только системный")
+    
+    ffmpeg_paths = [
+        ('ffmpeg', "Системный ffmpeg (через PATH) - основной"),
         (_FFMPEG_LINUX, "Linux /usr/bin/ffmpeg"),
         (_FFMPEG_LINUX_LOCAL, "Linux /usr/local/bin/ffmpeg"),
         (_FFMPEG_BOTHOST_1, "bothost.ru /usr/local/bin/ffmpeg"),
         (_FFMPEG_BOTHOST_2, "bothost.ru /usr/bin/ffmpeg"),
         (_FFMPEG_BOTHOST_3, "bothost.ru /opt/ffmpeg/bin/ffmpeg"),
-    ])
+    ]
+elif IS_LINUX:
+    # В Linux (не Docker): сначала системный, затем локальный
+    ffmpeg_paths = [
+        ('ffmpeg', "Системный ffmpeg (через PATH)"),
+        (_FFMPEG_LINUX, "Linux /usr/bin/ffmpeg"),
+        (_FFMPEG_LINUX_LOCAL, "Linux /usr/local/bin/ffmpeg"),
+        (_FFMPEG_BOTHOST_1, "bothost.ru /usr/local/bin/ffmpeg"),
+        (_FFMPEG_BOTHOST_2, "bothost.ru /usr/bin/ffmpeg"),
+        (_FFMPEG_BOTHOST_3, "bothost.ru /opt/ffmpeg/bin/ffmpeg"),
+        (_FFMPEG_LOCAL_LINUX, "Локальный Linux ffmpeg в папке бота (последний выбор)"),
+    ]
+else:
+    # В Windows: сначала локальный .exe, затем системный
+    ffmpeg_paths = [
+        (_FFMPEG_LOCAL_WIN, "Локальный Windows ffmpeg.exe в папке бота"),
+        ('ffmpeg', "Системный ffmpeg (через PATH)"),
+    ]
 
 print(f"🔍 Буду проверять {len(ffmpeg_paths)} путей к ffmpeg")
 
@@ -402,6 +430,28 @@ def resolve_track(query: str) -> dict | None:
 # ── Bot setup ─────────────────────────────────────────────────────────────────
 intents = discord.Intents.default()
 intents.message_content = True
+
+# Пытаемся загрузить Opus библиотеку перед созданием бота
+try:
+    import discord.opus
+    if not discord.opus.is_loaded():
+        print("🔊 Пытаюсь загрузить библиотеку Opus...")
+        # Пробуем разные пути к библиотеке Opus
+        opus_paths = ['libopus.so.0', 'libopus.so', '/usr/lib/x86_64-linux-gnu/libopus.so.0']
+        for path in opus_paths:
+            try:
+                discord.opus.load_opus(path)
+                if discord.opus.is_loaded():
+                    print(f"✅ Opus загружен из {path}")
+                    break
+            except Exception:
+                continue
+        
+        if not discord.opus.is_loaded():
+            print("⚠️ Не удалось загрузить Opus, но продолжаю работу")
+except Exception as e:
+    print(f"⚠️ Ошибка загрузки Opus: {e}")
+
 bot = commands.Bot(command_prefix=config.get('prefix', '/'), intents=intents)
 
 # Флаг готовности бота
@@ -681,6 +731,13 @@ class MusicCog(commands.Cog):
             embed.set_footer(text=f'lang: {lang}')
             await interaction.followup.send(embed=embed)
 
+        except discord.opus.OpusNotLoaded as e:
+            print(f"[TTS ERROR] OpusNotLoaded: {e}")
+            error_msg = f"❌ Библиотека Opus не загружена!\n"
+            error_msg += f"Без Opus голосовой чат Discord не работает.\n"
+            error_msg += f"В Docker: убедитесь что 'libopus-dev' установлен\n"
+            error_msg += f"Проверьте Dockerfile и пересоберите контейнер"
+            await interaction.followup.send(error_msg, ephemeral=True)
         except Exception as e:
             print(f"[TTS ERROR] {e}")
             error_msg = str(e)
@@ -690,6 +747,15 @@ class MusicCog(commands.Cog):
                 error_msg += f"Проверьте что ffmpeg установлен в системе.\n"
                 error_msg += f"В Docker: `apt-get install ffmpeg`\n"
                 error_msg += f"Текущий путь: `{tts_ffmpeg_exe}`"
+            elif "libavdevice.so" in error_msg.lower() or "shared object file" in error_msg.lower():
+                error_msg = f"❌ Проблема с библиотеками ffmpeg.\n"
+                error_msg += f"Локальный ffmpeg требует библиотек которых нет.\n"
+                error_msg += f"Используйте системный ffmpeg (установленный через apt-get)"
+            
+            # Убедимся что сообщение не пустое
+            if not error_msg or error_msg.strip() == "":
+                error_msg = f"❌ Неизвестная ошибка TTS: {type(e).__name__}"
+            
             await interaction.followup.send(error_msg, ephemeral=True)
 
     # ── /playlist ─────────────────────────────────────────────────────────────

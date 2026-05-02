@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Устанавливаем системные зависимости
+# Устанавливаем системные зависимости для Discord бота и ffmpeg
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libavdevice-dev \
@@ -9,19 +9,16 @@ RUN apt-get update && apt-get install -y \
     libavutil-dev \
     libswscale-dev \
     libswresample-dev \
-    nodejs \
-    npm \
+    libopus-dev \
+    libsodium-dev \
     libffi-dev \
     libssl-dev \
-    libsodium-dev \
     build-essential \
-    git \
-    curl \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install -g deno \
     && which ffmpeg && echo "✅ Системный FFmpeg установлен в: $(which ffmpeg)" \
     && ffmpeg -version | head -1 \
-    && echo "✅ Все необходимые библиотеки ffmpeg установлены"
+    && echo "✅ Все необходимые библиотеки ffmpeg установлены" \
+    && echo "✅ Библиотека Opus установлена (для голосового чата Discord)"
 
 # Создаем рабочую директорию
 WORKDIR /app
