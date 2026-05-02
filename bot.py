@@ -17,11 +17,12 @@ import sys
 
 # Проверяем ВСЕ критические зависимости
 deps = {
-    "discord": ("discord.py", "discord.py"),
+    "discord": ("discord.py[voice]", "discord.py[voice]"),
     "nacl": ("PyNaCl (критически для голоса!)", "pynacl"),
     "yt_dlp": ("yt-dlp", "yt-dlp"),
     "gtts": ("gTTS", "gtts"),
-    "ffmpeg": ("ffmpeg-python", "ffmpeg-python")
+    "ffmpeg": ("ffmpeg-python", "ffmpeg-python"),
+    "dotenv": ("python-dotenv", "python-dotenv")
 }
 
 missing_deps = []
@@ -76,6 +77,17 @@ print("=" * 60)
 print("✅ ДИАГНОСТИКА ЗАВЕРШЕНА")
 print("=" * 60)
 
+# Дополнительная проверка голосовых зависимостей
+print("🔊 Проверка голосовых зависимостей...")
+try:
+    import nacl
+    print("✅ PyNaCl установлен и готов к работе с голосом")
+except ImportError:
+    print("❌ PyNaCl не установлен! Голосовой функционал не будет работать!")
+    print("   Установите: pip install pynacl")
+    
+print("=" * 60)
+
 # ── Config ────────────────────────────────────────────────────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH     = os.path.join(_HERE, 'config.json')
@@ -98,8 +110,20 @@ else:
         exit(1)
 
 # ── FFmpeg — check local folder first, then rely on PATH ──────────────────────
+# Проверяем наличие ffmpeg в разных местах
 _FFMPEG_LOCAL = os.path.join(_HERE, 'ffmpeg.exe')
-FFMPEG_EXE = _FFMPEG_LOCAL if os.path.exists(_FFMPEG_LOCAL) else 'ffmpeg'
+_FFMPEG_IN_PARENT = os.path.join(_HERE, '..', 'ffmpeg-master-latest-win64-gpl', 'bin', 'ffmpeg.exe')
+
+FFMPEG_EXE = 'ffmpeg'  # По умолчанию используем системный
+
+if os.path.exists(_FFMPEG_LOCAL):
+    FFMPEG_EXE = _FFMPEG_LOCAL
+    print(f"✓ Использую локальный ffmpeg: {_FFMPEG_LOCAL}")
+elif os.path.exists(_FFMPEG_IN_PARENT):
+    FFMPEG_EXE = _FFMPEG_IN_PARENT
+    print(f"✓ Использую ffmpeg из родительской папки: {_FFMPEG_IN_PARENT}")
+else:
+    print("⚠️ Локальный ffmpeg не найден, использую системный")
 
 # Check if FFmpeg is available
 def check_ffmpeg():
